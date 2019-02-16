@@ -51,6 +51,7 @@
   function initMap() {
     new CoopCycle.AddressAutosuggest(document.querySelector('#address-search'), {
       address: sessionStorage.getItem('search_address') || '',
+      addresses: {{ addresses_normalized|json_encode()|raw }},
       geohash: initialGeohash,
       onAddressSelected: function(value, address) {
         if (address.geohash !== initialGeohash) {

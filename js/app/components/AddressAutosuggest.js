@@ -2,6 +2,9 @@ import React, { Component } from 'react'
 import Autosuggest from 'react-autosuggest'
 import PropTypes from 'prop-types'
 import ngeohash from 'ngeohash'
+import Fuse from 'fuse.js'
+import { includes, filter } from 'lodash'
+
 import i18n from '../i18n'
 import { placeToAddress } from '../utils/GoogleMaps'
 
@@ -26,16 +29,37 @@ const theme = {
   suggestionHighlighted:    'react-autosuggest__suggestion--highlighted',
   sectionContainer:         'react-autosuggest__section-container',
   sectionContainerFirst:    'react-autosuggest__section-container--first',
-  sectionTitle:             'react-autosuggest__section-title'
+  sectionTitle:             'react-autosuggest__section-title address-autosuggest__section-title'
 }
 
-const getSuggestionValue = suggestion => suggestion.description
+const fuseOptions = {
+  shouldSort: true,
+  includeScore: true,
+  threshold: 0.4,
+  location: 0,
+  distance: 100,
+  maxPatternLength: 32,
+  minMatchCharLength: 1,
+  keys: [
+    'streetAddress',
+  ]
+}
+
+const shouldRenderSuggestions = value => value.trim().length > 3
+
+const getSuggestionValue = suggestion => suggestion.value
 
 const renderSuggestion = suggestion => (
   <div>
-    { suggestion.description }
+    { suggestion.value }
   </div>
 )
+
+const renderSectionTitle = section => (
+  <strong>{ section.title }</strong>
+)
+
+const getSectionSuggestions = section => section.suggestions
 
 class AddressAutosuggest extends Component {
 
@@ -68,6 +92,8 @@ class AddressAutosuggest extends Component {
     this.geocoder = new window.google.maps.Geocoder()
     this.geocoderOK = window.google.maps.GeocoderStatus.OK
 
+    this.fuse = new Fuse(this.props.addresses, fuseOptions)
+
     if (this.props.autofocus) {
       this.autosuggest.input.focus()
     }
@@ -80,26 +106,64 @@ class AddressAutosuggest extends Component {
   }
 
   _autocompleteCallback(predictions, status) {
-    this.setState({
-      suggestions: predictions.map((p, idx) => ({
-        id: p.id,
-        description: p.description,
-        placeId: p.place_id,
+
+    let suggestions = []
+
+    const predictionsAsSuggestions = predictions.map((p, idx) => ({
+      type: 'prediction',
+      value: p.description,
+      id: p.id,
+      description: p.description,
+      placeId: p.place_id,
+      index: idx,
+      matchedSubstrings: p.matched_substrings,
+      terms: p.terms,
+      types: p.types,
+    }))
+
+    if (this.props.addresses.length > 0) {
+
+      const addressesAsSuggestions = this.props.addresses.map((address, idx) => ({
+        type: 'address',
+        value: address.streetAddress,
+        address: address,
         index: idx,
-        matchedSubstrings: p.matched_substrings,
-        terms: p.terms,
-        types: p.types,
-      })),
+      }))
+
+      const addressesValues = addressesAsSuggestions.map(suggestion => suggestion.value)
+
+      suggestions.push({
+        title: i18n.t('SAVED_ADDRESSES'),
+        suggestions: addressesAsSuggestions
+      })
+
+      suggestions.push({
+        title: i18n.t('ADDRESS_SUGGESTIONS'),
+        suggestions: filter(predictionsAsSuggestions, suggestion => !includes(addressesValues, suggestion.value))
+      })
+
+    } else {
+      suggestions = predictionsAsSuggestions
+    }
+
+    this.setState({
+      suggestions,
     })
+
   }
 
   onSuggestionsFetchRequested({ value }) {
+
     // @see https://developers.google.com/maps/documentation/javascript/places-autocomplete#place_autocomplete_service
     // @see https://developers.google.com/maps/documentation/javascript/reference/#AutocompleteService
     this.autocompleteService.getPlacePredictions({
       ...autocompleteOptions,
       input: value,
     }, this._autocompleteCallback.bind(this))
+
+    // console.log('onSuggestionsFetchRequested', value)
+    // var result = this.fuse.search(value)
+    // console.log('Fuse result', result)
   }
 
   onSuggestionsClearRequested() {
@@ -110,24 +174,42 @@ class AddressAutosuggest extends Component {
 
   onSuggestionSelected(event, { suggestion }) {
 
-    const { placeId } = suggestion
+    if (suggestion.type === 'prediction') {
+      const { placeId } = suggestion
 
-    this.geocoder.geocode({ placeId }, (results, status) => {
-      if (status === this.geocoderOK && results.length === 1) {
+      this.geocoder.geocode({ placeId }, (results, status) => {
+        if (status === this.geocoderOK && results.length === 1) {
 
-        const place = results[0]
-        const lat = place.geometry.location.lat()
-        const lng = place.geometry.location.lng()
-        const geohash = ngeohash.encode(lat, lng, 11)
+          const place = results[0]
+          const lat = place.geometry.location.lat()
+          const lng = place.geometry.location.lng()
+          const geohash = ngeohash.encode(lat, lng, 11)
 
-        const address = {
-          ...placeToAddress(place, this.state.value),
-          geohash,
+          const address = {
+            ...placeToAddress(place, this.state.value),
+            geohash,
+          }
+
+          this.props.onAddressSelected(this.state.value, address)
         }
+      })
+    }
 
-        this.props.onAddressSelected(this.state.value, address)
+    if (suggestion.type === 'address') {
+
+      const geohash = ngeohash.encode(
+        suggestion.address.geo.latitude,
+        suggestion.address.geo.longitude,
+        11
+      )
+
+      const address = {
+        ...suggestion.address,
+        geohash,
       }
-    })
+
+      this.props.onAddressSelected(suggestion.value, address)
+    }
   }
 
   renderInputComponent(inputProps) {
@@ -168,26 +250,45 @@ class AddressAutosuggest extends Component {
       onChange: this.onChange.bind(this)
     }
 
+    let autosuggestProps = {}
+
+    if (this.props.addresses.length > 0) {
+      autosuggestProps = {
+        multiSection: true,
+        getSectionSuggestions: getSectionSuggestions,
+      }
+    }
+
     return (
       <Autosuggest
         ref={ autosuggest => this.autosuggest = autosuggest }
         theme={ theme }
+        // multiSection={ true }
         suggestions={ suggestions }
+        shouldRenderSuggestions={ shouldRenderSuggestions }
         onSuggestionsFetchRequested={ this.onSuggestionsFetchRequested.bind(this) }
         onSuggestionsClearRequested={ this.onSuggestionsClearRequested.bind(this) }
         onSuggestionSelected={ this.onSuggestionSelected.bind(this) }
         getSuggestionValue={ getSuggestionValue }
+        // getSectionSuggestions={ getSectionSuggestions }
         renderInputComponent={ this.renderInputComponent.bind(this) }
         renderSuggestionsContainer={ this.renderSuggestionsContainer.bind(this) }
         renderSuggestion={ renderSuggestion }
+        renderSectionTitle={ renderSectionTitle }
         inputProps={ inputProps }
+        { ...autosuggestProps }
       />
     )
   }
 }
 
+AddressAutosuggest.defaultProps = {
+  addresses: [],
+}
+
 AddressAutosuggest.propTypes = {
   address: PropTypes.string.isRequired,
+  addresses: PropTypes.array.isRequired,
   geohash: PropTypes.string.isRequired,
   onAddressSelected: PropTypes.func.isRequired,
 }

@@ -2,6 +2,7 @@
 
 namespace AppBundle\Controller;
 
+use AppBundle\Entity\Address;
 use AppBundle\Entity\Restaurant;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
@@ -28,10 +29,28 @@ class IndexController extends AbstractController
 
         $showMore = $countAll > count($restaurants);
 
+        $user = $this->getUser();
+        if ($user) {
+            $addresses = $user->getAddresses()->toArray();
+        } else {
+            $addresses = [];
+        }
+
+        $addressesNormalized = array_map(function ($address) {
+
+            return $this->get('serializer')->normalize($address, 'jsonld', [
+                'resource_class' => Address::class,
+                'operation_type' => 'item',
+                'item_operation_name' => 'get',
+                'groups' => ['address', 'place']
+            ]);
+        }, $addresses);
+
         return array(
             'restaurants' => $restaurants,
             'max_results' => self::MAX_RESULTS,
             'show_more' => $showMore,
+            'addresses_normalized' => $addressesNormalized,
         );
     }
 }

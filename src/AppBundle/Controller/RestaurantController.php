@@ -212,6 +212,23 @@ class RestaurantController extends AbstractController
 
         $pages = ceil($count / self::ITEMS_PER_PAGE);
 
+        $user = $this->getUser();
+        if ($user) {
+            $addresses = $user->getAddresses()->toArray();
+        } else {
+            $addresses = [];
+        }
+
+        $addressesNormalized = array_map(function ($address) {
+
+            return $this->get('serializer')->normalize($address, 'jsonld', [
+                'resource_class' => Address::class,
+                'operation_type' => 'item',
+                'item_operation_name' => 'get',
+                'groups' => ['address', 'place']
+            ]);
+        }, $addresses);
+
         return array(
             'count' => $count,
             'restaurants' => $matches,
@@ -219,6 +236,7 @@ class RestaurantController extends AbstractController
             'pages' => $pages,
             'geohash' => $request->query->get('geohash'),
             'images' => $images,
+            'addresses_normalized' => $addressesNormalized,
         );
     }
 
