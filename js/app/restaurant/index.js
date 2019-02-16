@@ -87,6 +87,16 @@ window.initMap = function() {
 
   if (!cart.shippingAddress) {
     const searchAddress = sessionStorage.getItem('search_address')
+
+    if (sessionStorage.getItem('search_address_object')) {
+      try {
+        const addr = JSON.parse(sessionStorage.getItem('search_address_object'))
+        console.log('addr', addr)
+      } catch(e) {
+        sessionStorage.removeItem('search_address_object')
+      }
+    }
+
     if (searchAddress) {
       cart = {
         ...cart,

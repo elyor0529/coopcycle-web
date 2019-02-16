@@ -57,6 +57,7 @@
         if (address.geohash !== initialGeohash) {
           sessionStorage.setItem('search_geohash', address.geohash);
           sessionStorage.setItem('search_address', value);
+          sessionStorage.setItem('search_address_object', JSON.stringify(address));
           _paq.push(['trackEvent', 'RestaurantList', 'searchAddress', value]);
           $('#restaurant-search-form').find('input[name=geohash]').val(address.geohash);
           $('#restaurant-search-form').submit();

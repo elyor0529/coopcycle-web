@@ -109,7 +109,7 @@ class AddressAutosuggest extends Component {
 
     let suggestions = []
 
-    const predictionsAsSuggestions = predictions.map((p, idx) => ({
+    let predictionsAsSuggestions = predictions.map((p, idx) => ({
       type: 'prediction',
       value: p.description,
       id: p.id,
@@ -137,10 +137,15 @@ class AddressAutosuggest extends Component {
         suggestions: addressesAsSuggestions
       })
 
-      suggestions.push({
-        title: i18n.t('ADDRESS_SUGGESTIONS'),
-        suggestions: filter(predictionsAsSuggestions, suggestion => !includes(addressesValues, suggestion.value))
-      })
+      predictionsAsSuggestions =
+        filter(predictionsAsSuggestions, suggestion => !includes(addressesValues, suggestion.value))
+
+      if (predictionsAsSuggestions.length > 0) {
+        suggestions.push({
+          title: i18n.t('ADDRESS_SUGGESTIONS'),
+          suggestions: filter(predictionsAsSuggestions, suggestion => !includes(addressesValues, suggestion.value))
+        })
+      }
 
     } else {
       suggestions = predictionsAsSuggestions
