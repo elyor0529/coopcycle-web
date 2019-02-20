@@ -57,6 +57,12 @@ class EmailManager
         $message->setSender($this->getFrom());
         $message->setFrom($this->getFrom());
 
+        $headers = $message->getHeaders();
+
+        // @see https://app.mailjet.com/docs/emails_headers
+        $headers->addTextHeader('X-MJ-TemplateErrorReporting', 'dev@coopcycle.org');
+        $headers->addTextHeader('X-MJ-TemplateErrorDeliver', 'deliver');
+
         return $message;
     }
 
